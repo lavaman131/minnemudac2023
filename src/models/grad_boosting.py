@@ -4,20 +4,20 @@ from sklearn.model_selection import GridSearchCV, KFold, train_test_split
 import xgboost as xgb
 from pathlib import Path
 from sklearn.metrics import mean_absolute_error
-from features import FEATURES, XGB_PARAMS
+from src.models.features import FEATURES, XGB_PARAMS
 
 
 DATA_PATH = Path('../../data')
 df = pd.read_parquet(DATA_PATH.joinpath('processed', 'train.parquet'))
 
 X = df[FEATURES].to_numpy()
-y = df['Attendance'].to_numpy()
+y = df['Attendance_TRUTH_y'].to_numpy()
 
 # X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # params =  {
-#     'n_estimators': np.arange(5, 105, 5),
-#     'learning_rate': [1e-5, 1e-4, 1e-3, 1e-2, 0.1, 0.5, 1]
+#     'n_estimators': np.arange(750, 1050, 50),
+#     # 'learning_rate': np.arange(0.1, 1.05, 0.05)
 # }
 
 # reg = xgb.XGBRegressor(
@@ -25,6 +25,7 @@ y = df['Attendance'].to_numpy()
 #         tree_method="hist",
 #         eval_metric=mean_absolute_error,
 #         random_state=42,
+#         n_jobs=-1,
 #     )
 
 # print('Running grid search for best parameters:')

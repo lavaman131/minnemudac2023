@@ -41,9 +41,11 @@ def clean_csv(p: Union[str, Path]='../../data/raw/standings',
         p = Path(p)
     if not isinstance(save_file_path, Path):
         save_file_path = Path(save_file_path)
-    full_df = pd.DataFrame(columns=['Gm#', 'Date', 'Tm', 'At' 'Opp', 'W/L', 'R',
-                                    'RA', 'W-L', 'Rank', 'GB','Time', 'D/N',
-                                    'cLI', 'Streak'])
+    full_df = pd.DataFrame(columns=['Gm#', 'Year', 'Date', 'Unnamed: 3', 
+                                    'Tm', 'Unnamed: 5', 'Opp', 'W/L',
+                                    'R', 'RA', 'Inn', 'W-L', 'Rank', 'GB', 'Win',
+                                    'Loss', 'Save', 'Time', 'D/N', 'Attendance_TRUTH',
+                                    'cLI', 'Streak', 'Orig. Scheduled'])
     for f in p.iterdir():
         if f.suffix == '.csv':
             df = pd.read_csv(f)
@@ -53,13 +55,41 @@ def clean_csv(p: Union[str, Path]='../../data/raw/standings',
             full_date = pd.to_datetime(full_date, format='%b %d %Y')
             df.insert(loc=1, column='Full_Date', value=full_date)
             df.drop(['Year', 'Date'], axis=1, inplace=True)
-            df.rename({'Full_Date': 'Date', 'Unnamed: 5': 'At'}, axis=1, inplace=True)
+            df.rename({'Full_Date': 'Date', 'Unnamed: 5': 'At', 
+                       'Attendance': 'Attendance_TRUTH'}, axis=1, inplace=True)
             _get_home_away_col(df)
-            # NOTE we only care about rows where Tm == HomeTeam
-            df = df.loc[df.Tm == df.HomeTeam]
-            full_df = pd.concat([full_df, df], axis=0)    
+            full_df = pd.concat([full_df, df], axis=0)   
+             
+    # Where Tm == HomeTeam
+    df_home = full_df.loc[full_df.Tm == full_df.HomeTeam].copy()
+    # collect wins and losses for home team
+    df_home['HomeTeam_W'] = df_home.loc[:, 'W-L'].apply(lambda s: s.split('-')[0]).astype('int')
+    df_home['HomeTeam_L'] = df_home.loc[:, 'W-L'].apply(lambda s: s.split('-')[1]).astype('int')
+    df_home.rename({'Rank': 'HomeTeam_Rank'}, axis=1, inplace=True)
+    df_home.rename({'cLI': 'HomeTeam_cLI'}, axis=1, inplace=True)
+    # convert streak to quantitative
+    df_home.loc[:, 'HomeTeam_Streak_count'] = df_home['Streak'].apply(lambda s: str(s).count('+') 
+                                                                if str(s).startswith('+')
+                                                                else -1 * str(s).count('-'))
+    
+    # Where Tm == VisitingTeam
+    df_away = full_df.loc[full_df.Tm == full_df.VisitingTeam].copy()
+    # collect wins and losses for away team
+    df_away['VisitingTeam_W'] = df_away.loc[:, 'W-L'].apply(lambda s: s.split('-')[0]).astype('int')
+    df_away['VisitingTeam_L'] = df_away.loc[:, 'W-L'].apply(lambda s: s.split('-')[1]).astype('int')
+    df_away.rename({'Rank': 'VisitingTeam_Rank'}, axis=1, inplace=True)
+    df_away.rename({'cLI': 'VisitingTeam_cLI'}, axis=1, inplace=True)
+    # convert streak to quantitative
+    df_away['VisitingTeam_Streak_count'] = df_away.loc[:, 'Streak'].apply(lambda s: str(s).count('+')
+                                                                if str(s).startswith('+')
+                                                                else -1 * str(s).count('-'))
+    cols = ['Date', 'HomeTeam', 'VisitingTeam', 'VisitingTeam_W', 'VisitingTeam_L', 
+             'VisitingTeam_Rank', 'VisitingTeam_cLI',
+             'VisitingTeam_Streak_count', 'Attendance_TRUTH']
+    full_df = pd.merge(df_home, df_away[cols], how='inner', on=['Date', 'HomeTeam', 'VisitingTeam'])
+    print(full_df.shape)
     full_df.to_parquet(save_file_path/f'All_Team_Standings_{year_range}.parquet')
-
+    print('Done')
 # clean_files()
 clean_csv()
 

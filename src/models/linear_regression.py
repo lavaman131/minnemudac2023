@@ -3,14 +3,14 @@ import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
-from features import FEATURES
+from src.models.features import FEATURES
 
 
 DATA_PATH = Path('../../data')
 df = pd.read_parquet(DATA_PATH.joinpath('processed', 'train.parquet'))
 
 X = df[FEATURES].to_numpy()
-y = df['Attendance'].to_numpy()
+y = df['Attendance_TRUTH_y'].to_numpy()
 
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
