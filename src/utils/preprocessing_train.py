@@ -3,13 +3,13 @@ import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 from pathlib import Path
 from typing import List
-from fastai.tabular.core import add_datepart
+from fastai.tabular.all import *
 
 
 # helper function
 def to_numerical(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     data = np.empty((df.shape[0], len(columns)))
-    for idx, col in enumerate(df[columns]):
+    for idx, col in enumerate(columns):
         mapping = {key: idx for idx, key in enumerate(np.unique(df[col]))}
         data[:, idx] = df[col].map(mapping)
     return pd.DataFrame(data, columns=columns)
@@ -17,7 +17,7 @@ def to_numerical(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
 
 DATA_PATH = Path("../../data")
 
-df = pd.read_parquet(DATA_PATH.joinpath("processed", "game_logs_standings.parquet"))
+df = pd.read_parquet(DATA_PATH.joinpath("processed", "train.parquet"))
 
 arena_capacity = {
     "Angel Stadium of Anaheim": 45050,
@@ -201,6 +201,63 @@ df = df[
 df.dropna(axis=0, inplace=True)
 df.drop(["Unnamed: 3", "Attendance_TRUTH_x", "Attendance"], axis=1, inplace=True)
 
+CONT_FEATURES = [
+        "avg_attendance_1_yr_ago",
+        "avg_attendance_2_yr_ago",
+        "avg_attendance_3_yr_ago",
+        "is_holiday",
+        "Year",
+        "Month",
+        "Week",
+        "DayNight",
+        "Dayofyear",
+        "Is_month_end",
+        "Is_month_start",
+        "Is_quarter_end",
+        "Is_quarter_start",
+        "Is_year_end",
+        "Is_year_start",
+        "Stadium_Capacity",
+        "HomeTeam_cLI",
+        "HomeTeam_Rank",
+        "HomeTeam_W",
+        "HomeTeam_Streak_count",
+        "HomeTeamGameNumber",
+        "VisitingTeam_cLI",
+        "VisitingTeam_Rank",
+        "VisitingTeam_L",
+        "VisitingTeam_Streak_count",
+        "VisitingTeamGameNumber",
+]
 
-# save processed data
-df.to_parquet(DATA_PATH.joinpath("processed", "game_logs_standings_v2.parquet"))
+CAT_FEATURES = ["BallParkID",
+                "Dayofweek"]
+
+splits = RandomSplitter(valid_pct=0.2)(range_of(df))
+
+to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
+                   cat_names = CAT_FEATURES,
+                   cont_names = CONT_FEATURES,
+                   y_names="Attendance_TRUTH_y",
+                   splits=splits)
+
+dls = to.dataloaders(bs=64)
+
+learn = tabular_learner(dls, metrics=mae)
+learn.fit_one_cycle(10)
+
+#function to embed features ,obtained from fastai forums
+def embed_features(learner, xs):
+    xs = xs.copy()
+    for i, feature in enumerate(learner.dls.cat_names):
+        emb = learner.model.embeds[i]
+        new_feat = pd.DataFrame(emb(tensor(xs[feature], dtype=torch.int64, device='mps')), index=xs.index, columns=[f'{feature}_{j}' for j in range(emb.embedding_dim)])
+        xs.drop(columns=feature, inplace=True)
+        xs = xs.join(new_feat)
+    return xs
+
+embeddings = embed_features(learn, to.all_cols)
+
+embeddings.to_parquet(DATA_PATH.joinpath('processed', 'train.parquet'))
+
+

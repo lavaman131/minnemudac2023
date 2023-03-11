@@ -1,10 +1,13 @@
 import numpy as np
 
-# categorical embeddings (for day of the week, player names/IDs, Ball park ID),
-# incorporating average temperature/weather into the model,
-# looking at if a day of a game is an observed holiday
+
+
 # looking if teams are rivals
-# looking at number of all-stars
+# WAR
+# runs per game 
+# average age of team (pitch age, bat_age)
+# all-stars
+
 FEATURES = np.array(
     [
         "avg_attendance_1_yr_ago",
