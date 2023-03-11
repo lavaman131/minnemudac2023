@@ -9,7 +9,7 @@ from sklearn.metrics import r2_score
 
 
 DATA_PATH = Path('../../data')
-df = pd.read_parquet(DATA_PATH.joinpath('processed', 'train_v2.parquet'))
+df = pd.read_parquet(DATA_PATH.joinpath('processed', 'train.parquet'))
 
 X = df.drop(['Attendance_TRUTH_y'], axis=1).to_numpy()
 y = df['Attendance_TRUTH_y'].to_numpy()
