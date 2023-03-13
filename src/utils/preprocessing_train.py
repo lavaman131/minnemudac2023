@@ -229,7 +229,14 @@ CONT_FEATURES = [
 ]
 CONT_FEATURES.extend(attendance_features)
 
-CAT_FEATURES = ["BallParkID", "Dayofweek"]
+CAT_FEATURES = [
+    "BallParkID",
+    "Dayofweek",
+    "VisitingTeam",
+    "VisitingTeamLeague",
+    "HomeTeam",
+    "HomeTeamLeague",
+]
 
 splits = RandomSplitter(valid_pct=0.2)(range_of(df))
 
@@ -244,7 +251,7 @@ to = TabularPandas(
 
 dls = to.dataloaders(bs=64)
 
-learn = tabular_learner(dls, metrics=mae, layers=[500, 1000]) # default is [200, 100]
+learn = tabular_learner(dls, metrics=mae, layers=[200, 100])  # default is [200, 100]
 learn.fit_one_cycle(20)
 
 
