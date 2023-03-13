@@ -161,7 +161,7 @@ df["is_holiday"] = df["Date"].apply(lambda d: d in holidays).astype("int")
 
 df = add_datepart(df, "Date", drop=False)
 
-# df["season"] = df["Month"] % 12 // 3 + 1
+df["season"] = df["Month"] % 12 // 3 + 1
 
 df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_numerical(
     df, ["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]
@@ -171,21 +171,20 @@ df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_nume
 group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])["Attendance_TRUTH_y"].mean()
 years_ago = 3
 for idx, row in df.iterrows():
-    # year is at least 2001
     for y in range(1, years_ago + 1):
-        if row.Year > (df.Year.min() + y - 1):
+        if row.Year >= (df.Year.min() + y):
             try:
-                # find average attendance of all previous year matchups of home team with visting team
+                # find average attendance of all previous year matchups of home team with visiting team
                 df.loc[idx, f"avg_attendance_{y}_yr_ago"] = group[row.Year - y][
                     row.HomeTeam
                 ][row.VisitingTeam]
             except KeyError:
                 # find average attendance of all previous year games of home team
                 df.loc[idx, f"avg_attendance_{y}_yr_ago"] = df.loc[
-                    df.Year == row.Year - y, "Attendance_TRUTH_y"
+                    (df.Year == row.Year - y) & (df.HomeTeam == row.HomeTeam),
+                    "Attendance_TRUTH_y",
                 ].mean()
         else:
-            # year is 2000 and we don't have any information
             df.loc[idx, f"avg_attendance_{y}_yr_ago"] = np.nan
 
 
@@ -201,63 +200,69 @@ df = df[
 df.dropna(axis=0, inplace=True)
 df.drop(["Unnamed: 3", "Attendance_TRUTH_x", "Attendance"], axis=1, inplace=True)
 
+attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, years_ago + 1)]
 CONT_FEATURES = [
-        "avg_attendance_1_yr_ago",
-        "avg_attendance_2_yr_ago",
-        "avg_attendance_3_yr_ago",
-        "is_holiday",
-        "Year",
-        "Month",
-        "Week",
-        "DayNight",
-        "Dayofyear",
-        "Is_month_end",
-        "Is_month_start",
-        "Is_quarter_end",
-        "Is_quarter_start",
-        "Is_year_end",
-        "Is_year_start",
-        "Stadium_Capacity",
-        "HomeTeam_cLI",
-        "HomeTeam_Rank",
-        "HomeTeam_W",
-        "HomeTeam_Streak_count",
-        "HomeTeamGameNumber",
-        "VisitingTeam_cLI",
-        "VisitingTeam_Rank",
-        "VisitingTeam_L",
-        "VisitingTeam_Streak_count",
-        "VisitingTeamGameNumber",
+    "is_holiday",
+    "Year",
+    "Month",
+    "Week",
+    "DayNight",
+    "Dayofyear",
+    "season",
+    "Is_month_end",
+    "Is_month_start",
+    "Is_quarter_end",
+    "Is_quarter_start",
+    "Is_year_end",
+    "Is_year_start",
+    "Stadium_Capacity",
+    "HomeTeam_cLI",
+    "HomeTeam_Rank",
+    "HomeTeam_W",
+    "HomeTeam_Streak_count",
+    "HomeTeamGameNumber",
+    "VisitingTeam_cLI",
+    "VisitingTeam_Rank",
+    "VisitingTeam_L",
+    "VisitingTeam_Streak_count",
+    "VisitingTeamGameNumber",
 ]
+CONT_FEATURES.extend(attendance_features)
 
-CAT_FEATURES = ["BallParkID",
-                "Dayofweek"]
+CAT_FEATURES = ["BallParkID", "Dayofweek"]
 
 splits = RandomSplitter(valid_pct=0.2)(range_of(df))
 
-to = TabularPandas(df, procs=[Categorify, FillMissing, Normalize],
-                   cat_names = CAT_FEATURES,
-                   cont_names = CONT_FEATURES,
-                   y_names="Attendance_TRUTH_y",
-                   splits=splits)
+to = TabularPandas(
+    df,
+    procs=[Categorify, FillMissing, Normalize],
+    cat_names=CAT_FEATURES,
+    cont_names=CONT_FEATURES,
+    y_names="Attendance_TRUTH_y",
+    splits=splits,
+)
 
 dls = to.dataloaders(bs=64)
 
-learn = tabular_learner(dls, metrics=mae)
-learn.fit_one_cycle(10)
+learn = tabular_learner(dls, metrics=mae, layers=[500, 1000]) # default is [200, 100]
+learn.fit_one_cycle(20)
 
-#function to embed features ,obtained from fastai forums
+
+# function to embed features ,obtained from fastai forums
 def embed_features(learner, xs):
     xs = xs.copy()
     for i, feature in enumerate(learner.dls.cat_names):
         emb = learner.model.embeds[i]
-        new_feat = pd.DataFrame(emb(tensor(xs[feature], dtype=torch.int64, device='mps')), index=xs.index, columns=[f'{feature}_{j}' for j in range(emb.embedding_dim)])
+        new_feat = pd.DataFrame(
+            emb(tensor(xs[feature], dtype=torch.int64, device="mps")),
+            index=xs.index,
+            columns=[f"{feature}_{j}" for j in range(emb.embedding_dim)],
+        )
         xs.drop(columns=feature, inplace=True)
         xs = xs.join(new_feat)
     return xs
 
+
 embeddings = embed_features(learn, to.all_cols)
 
-embeddings.to_parquet(DATA_PATH.joinpath('processed', 'train.parquet'))
-
-
+embeddings.to_parquet(DATA_PATH.joinpath("processed", "train.parquet"))

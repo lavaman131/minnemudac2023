@@ -1,13 +1,5 @@
 import numpy as np
 
-
-
-# looking if teams are rivals
-# WAR
-# runs per game 
-# average age of team (pitch age, bat_age)
-# all-stars
-
 FEATURES = np.array(
     [
         "avg_attendance_1_yr_ago",

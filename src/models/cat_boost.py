@@ -14,30 +14,6 @@ df = pd.read_parquet(DATA_PATH.joinpath('processed', 'train.parquet'))
 X = df.drop(['Attendance_TRUTH_y'], axis=1).to_numpy()
 y = df['Attendance_TRUTH_y'].to_numpy()
 
-# params =  {
-#     'n_estimators': np.arange(5, 105, 5),
-#     'depth': np.arange(1, 6),
-#     'learning_rate': [1e-5, 1e-4, 1e-3, 1e-2, 0.1, 0.5, 1],
-#     'l2_leaf_reg': [1, 3, 5, 7, 9]
-# }
-
-# randomized_search_result = reg.randomized_search(params,
-#                                                  X=X,
-#                                                  y=y,
-#                                                  cv=5,
-#                                                  n_iter=20,
-#                                                  partition_random_seed=42,
-#                                                  calc_cv_statistics=True,
-#                                                  search_by_train_test_split=True,
-#                                                  refit=True,
-#                                                  shuffle=True,
-#                                                  stratified=False,
-#                                                  plot=False,
-#                                                  train_size=0.8,
-#                                                  verbose=False,
-#                                                  log_cout=sys.stdout,
-#                                                  log_cerr=sys.stderr)
-
 print('5-Fold Cross Validation Results:')
 kf = KFold(n_splits=5, random_state=42, shuffle=True)
 
