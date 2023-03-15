@@ -140,6 +140,7 @@ df["Streak_count"] = df["Streak"].apply(
     lambda s: s.count("+") if s.startswith("+") else -1 * s.count("-")
 )
 
+
 df[["DayNight", "StadiumID", "VisitingTeamLeague", "HomeTeamLeague"]] = to_numerical(
     df, ["DayNight", "BallParkID", "VisitingTeamLeague", "HomeTeamLeague"]
 )
@@ -200,7 +201,6 @@ df = df[
 df.dropna(axis=0, inplace=True)
 df.drop(["Unnamed: 3", "Attendance_TRUTH_x", "Attendance"], axis=1, inplace=True)
 
-attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, years_ago + 1)]
 CONT_FEATURES = [
     "is_holiday",
     "Year",
@@ -227,6 +227,7 @@ CONT_FEATURES = [
     "VisitingTeam_Streak_count",
     "VisitingTeamGameNumber",
 ]
+attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, years_ago + 1)]
 CONT_FEATURES.extend(attendance_features)
 
 CAT_FEATURES = [
