@@ -169,8 +169,33 @@ df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_nume
 )
 
 
-group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])["Attendance_TRUTH_y"].mean()
+# get previous year metrics
+def get_previous_year_metrics(features, df, scale=False):
+    for feature in features:
+        for (year, home_team), g in df.groupby(["Year", "HomeTeam"]):
+            prev_metric = (
+                g[["Date", feature]].sort_values(by="Date", axis=0)[feature].iloc[-1]
+            )
+            if scale:
+                prev_metric *= (
+                    163 - df.loc[(df.Year == year) & (df.HomeTeam == home_team), "Gm#"]
+                ) / 163
+            df.loc[
+                (df.Year == year) & (df.HomeTeam == home_team),
+                f"final_{feature}_1_yr_ago",
+            ] = prev_metric
+
+
+#! Look at 2023 ticket prices and fan cost index
+#! difference between team rankings (wins, losses)
+#! look at distance of stadium to city. I also think population of city for home team would help.
+get_previous_year_metrics(
+    features=["HomeTeam_Rank", "HomeTeam_cLI", "HomeTeam_W"], df=df, scale=False
+)
+
 years_ago = 3
+
+group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])["Attendance_TRUTH_y"].mean()
 for idx, row in df.iterrows():
     for y in range(1, years_ago + 1):
         if row.Year >= (df.Year.min() + y):
@@ -201,31 +226,36 @@ df = df[
 df.dropna(axis=0, inplace=True)
 df.drop(["Unnamed: 3", "Attendance_TRUTH_x", "Attendance"], axis=1, inplace=True)
 
+df["Rank_Diff"] = (df["HomeTeam_Rank"] - df["VisitingTeam_Rank"]).abs()
+
 CONT_FEATURES = [
     "is_holiday",
     "Year",
     "Month",
     "Week",
     "DayNight",
-    "Dayofyear",
+    # "Dayofyear",
     "season",
-    "Is_month_end",
-    "Is_month_start",
-    "Is_quarter_end",
-    "Is_quarter_start",
-    "Is_year_end",
-    "Is_year_start",
-    "Stadium_Capacity",
-    "HomeTeam_cLI",
-    "HomeTeam_Rank",
-    "HomeTeam_W",
-    "HomeTeam_Streak_count",
-    "HomeTeamGameNumber",
-    "VisitingTeam_cLI",
-    "VisitingTeam_Rank",
-    "VisitingTeam_L",
-    "VisitingTeam_Streak_count",
-    "VisitingTeamGameNumber",
+    # "Is_month_end",
+    # "Is_month_start",
+    # "Is_quarter_end",
+    # "Is_quarter_start",
+    # "Is_year_end",
+    # "Is_year_start",
+    # "HomeTeam_cLI",
+    # "HomeTeam_Rank",
+    # "HomeTeam_W",
+    # "HomeTeam_Streak_count",
+    # "HomeTeamGameNumber",
+    # "final_HomeTeam_Rank_1_yr_ago",
+    # "final_HomeTeam_cLI_1_yr_ago",
+    # "final_HomeTeam_W_1_yr_ago",
+    # "Rank_Diff",
+    # "VisitingTeam_cLI",
+    # "VisitingTeam_Rank",
+    # "VisitingTeam_L",
+    # "VisitingTeam_Streak_count",
+    # "VisitingTeamGameNumber",
 ]
 attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, years_ago + 1)]
 CONT_FEATURES.extend(attendance_features)
@@ -253,7 +283,7 @@ to = TabularPandas(
 dls = to.dataloaders(bs=64)
 
 learn = tabular_learner(dls, metrics=mae, layers=[200, 100])  # default is [200, 100]
-learn.fit_one_cycle(20)
+learn.fit_one_cycle(10)
 
 
 # function to embed features ,obtained from fastai forums
@@ -273,4 +303,4 @@ def embed_features(learner, xs):
 
 embeddings = embed_features(learn, to.all_cols)
 
-embeddings.to_parquet(DATA_PATH.joinpath("processed", "train.parquet"))
+embeddings.to_parquet(DATA_PATH.joinpath("processed", "train_embed.parquet"))
