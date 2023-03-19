@@ -170,31 +170,43 @@ df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_nume
 
 
 # get previous year metrics
-def get_previous_year_metrics(features, df, scale=False):
+def get_previous_year_metrics(df, features, years_ago=1, scale=False):
+    group = df.groupby(["Year", "HomeTeam"])
     for feature in features:
-        for (year, home_team), g in df.groupby(["Year", "HomeTeam"]):
-            prev_metric = (
-                g[["Date", feature]].sort_values(by="Date", axis=0)[feature].iloc[-1]
-            )
-            if scale:
-                prev_metric *= (
-                    163 - df.loc[(df.Year == year) & (df.HomeTeam == home_team), "Gm#"]
-                ) / 163
-            df.loc[
-                (df.Year == year) & (df.HomeTeam == home_team),
-                f"final_{feature}_1_yr_ago",
-            ] = prev_metric
+        for idx, row in df.iterrows():
+            for y in range(1, years_ago + 1):
+                if row.Year >= (df.Year.min() + y):
+                    try:
+                        prev_metric = df.loc[idx, f"final_{feature}_{y}_yr_ago"] = (
+                            group[row.Year - y][row.HomeTeam]
+                            .sort_values(by="Date", axis=0)[feature]
+                            .iloc[-1]
+                        )
+                    except:
+                        df.loc[idx, f"final_{feature}_{y}_yr_ago"] = np.nan
+                    if scale:
+                        prev_metric *= (
+                            163
+                            - df.loc[
+                                (df.Year == row.Year) & (df.HomeTeam == row.HomeTeam),
+                                "Gm#",
+                            ].max()
+                        ) / 163
+                else:
+                    df.loc[idx, f"final_{feature}_{y}_yr_ago"] = np.nan
 
 
 #! Look at 2023 ticket prices and fan cost index
 #! difference between team rankings (wins, losses)
 #! look at distance of stadium to city. I also think population of city for home team would help.
 get_previous_year_metrics(
-    features=["HomeTeam_Rank", "HomeTeam_cLI", "HomeTeam_W"], df=df, scale=False
+    df=df,
+    features=["HomeTeam_Rank", "HomeTeam_cLI", "HomeTeam_W"],
+    years_ago=1,
+    scale=False,
 )
 
 years_ago = 3
-
 group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])["Attendance_TRUTH_y"].mean()
 for idx, row in df.iterrows():
     for y in range(1, years_ago + 1):
@@ -234,16 +246,16 @@ CONT_FEATURES = [
     "Month",
     "Week",
     "DayNight",
-    # "Dayofyear",
+    "Dayofyear",
     "season",
-    # "Is_month_end",
-    # "Is_month_start",
-    # "Is_quarter_end",
-    # "Is_quarter_start",
-    # "Is_year_end",
-    # "Is_year_start",
+    "Is_month_end",
+    "Is_month_start",
+    "Is_quarter_end",
+    "Is_quarter_start",
+    "Is_year_end",
+    "Is_year_start",
     # "HomeTeam_cLI",
-    # "HomeTeam_Rank",
+    "HomeTeam_Rank",
     # "HomeTeam_W",
     # "HomeTeam_Streak_count",
     # "HomeTeamGameNumber",
