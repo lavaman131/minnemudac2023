@@ -41,19 +41,12 @@ RF_PARAMS = {"max_depth": 11, "max_leaf_nodes": 75, "n_estimators": 95}
 
 # xgboost params
 XGB_PARAMS = {
-    "max_depth": 11,
-    "max_leaves": 75,
+    "n_estimators": 500,
     "learning_rate": 0.14,
-    "reg_lambda": 3,
-    "n_estimators": 1000,
 }
 
 # catboost params
 CB_PARAMS = {
-    "grow_policy": "Lossguide",
-    "depth": 11,
-    "max_leaves": 75,
-    "n_estimators": 1000,
-    "learning_rate": 0.14,
-    "l2_leaf_reg": 3,
+    "n_estimators": 1500,
+    # "learning_rate": 0.14,
 }

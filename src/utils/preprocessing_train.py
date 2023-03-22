@@ -3,7 +3,21 @@ import pandas as pd
 from pandas.tseries.holiday import USFederalHolidayCalendar
 from pathlib import Path
 from typing import List
+from tqdm import tqdm
 from fastai.tabular.all import *
+from torch import nn
+import requests
+from dotenv import dotenv_values
+import json
+import googlemaps
+import datetime
+
+config = dotenv_values("../../.env")
+API_KEY = config["MAPS_API_KEY"]
+YEARS_AGO = 1
+FEATURES = ["HomeTeam_Rank", "HomeTeam_W"]
+
+gmaps = googlemaps.Client(key=API_KEY)
 
 
 # helper function
@@ -160,85 +174,179 @@ cal = USFederalHolidayCalendar()
 holidays = cal.holidays(start="2000-01-01", end="2022-12-31").to_pydatetime()
 df["is_holiday"] = df["Date"].apply(lambda d: d in holidays).astype("int")
 
-df = add_datepart(df, "Date", drop=False)
-
 df["season"] = df["Month"] % 12 // 3 + 1
 
 df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_numerical(
     df, ["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]
 )
 
-
-# get previous year metrics
-def get_previous_year_metrics(df, features, years_ago=1, scale=False):
-    group = df.groupby(["Year", "HomeTeam"])
-    for feature in features:
-        for idx, row in df.iterrows():
-            for y in range(1, years_ago + 1):
-                if row.Year >= (df.Year.min() + y):
-                    try:
-                        prev_metric = df.loc[idx, f"final_{feature}_{y}_yr_ago"] = (
-                            group[row.Year - y][row.HomeTeam]
-                            .sort_values(by="Date", axis=0)[feature]
-                            .iloc[-1]
-                        )
-                    except:
-                        df.loc[idx, f"final_{feature}_{y}_yr_ago"] = np.nan
-                    if scale:
-                        prev_metric *= (
-                            163
-                            - df.loc[
-                                (df.Year == row.Year) & (df.HomeTeam == row.HomeTeam),
-                                "Gm#",
-                            ].max()
-                        ) / 163
-                else:
-                    df.loc[idx, f"final_{feature}_{y}_yr_ago"] = np.nan
-
-
-#! Look at 2023 ticket prices and fan cost index
-#! difference between team rankings (wins, losses)
-#! look at distance of stadium to city. I also think population of city for home team would help.
-get_previous_year_metrics(
-    df=df,
-    features=["HomeTeam_Rank", "HomeTeam_cLI", "HomeTeam_W"],
-    years_ago=1,
-    scale=False,
+df.drop(
+    ["Unnamed: 3", "Unnamed: 5", "Attendance_TRUTH_x", "Attendance"],
+    axis=1,
+    inplace=True,
 )
 
-years_ago = 3
-group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])["Attendance_TRUTH_y"].mean()
-for idx, row in df.iterrows():
-    for y in range(1, years_ago + 1):
-        if row.Year >= (df.Year.min() + y):
-            try:
-                # find average attendance of all previous year matchups of home team with visiting team
-                df.loc[idx, f"avg_attendance_{y}_yr_ago"] = group[row.Year - y][
-                    row.HomeTeam
-                ][row.VisitingTeam]
-            except KeyError:
-                # find average attendance of all previous year games of home team
-                df.loc[idx, f"avg_attendance_{y}_yr_ago"] = df.loc[
-                    (df.Year == row.Year - y) & (df.HomeTeam == row.HomeTeam),
-                    "Attendance_TRUTH_y",
-                ].mean()
-        else:
-            df.loc[idx, f"avg_attendance_{y}_yr_ago"] = np.nan
+
+# get previous year metrics
+def get_previous_year_metrics(df, feature, yrs_ago=1):
+    group = df.groupby(["Year", "HomeTeam"])
+    print(f"Extracting final {feature} for {yrs_ago} yr ago")
+    new_col_name = f"final_{feature}_{yrs_ago}_yr_ago"
+    last_feature = group[feature].transform(lambda x: x.max(skipna=True))
+    filtered_group = group.filter(
+        lambda x: df.Year.min() + yrs_ago <= x["Year"].max() <= df.Year.max()
+    )
+    filtered_group[new_col_name] = last_feature.shift(yrs_ago)
+    return filtered_group
 
 
-# final cleaning
-df = df.loc[df.Tm == df.HomeTeam]
-df = df[df.columns.unique()]
+def get_avg_attendance(df, yrs_ago=1):
+    group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])
+    print(f"Extracting average attendance for {yrs_ago} yr ago")
+    new_col_name = f"avg_attendance_{yrs_ago}_yr_ago"
+    avg_attendance = group["Attendance_TRUTH_y"].transform(
+        lambda x: x.mean(skipna=True)
+    )
+    filtered_group = group.filter(
+        lambda x: df.Year.min() + yrs_ago <= x["Year"].max() <= df.Year.max()
+    )
+    filtered_group[new_col_name] = avg_attendance.shift(yrs_ago)
+    return filtered_group
+
+
+final_feature_dfs = []
+for y in range(1, YEARS_AGO + 1):
+    df_with_avg_attendance = get_avg_attendance(df=df, yrs_ago=y).copy()
+    df_with_avg_attendance = df_with_avg_attendance
+    
+    feature_df = []
+    for feature in FEATURES:
+        df_with_final_feature = get_previous_year_metrics(
+        df=df, feature=feature, yrs_ago=y).copy()
+        feature_df.append(df_with_final_feature[["Date", "HomeTeam", "VisitingTeam", f"final_{feature}_{y}_yr_ago"]])
+    feature_df = pd.concat(feature_df, axis=1)
+    
+    d = pd.concat([df_with_avg_attendance, feature_df], axis=1)
+    final_feature_dfs.append(d.loc[:, ~d.columns.duplicated()])
+    
+final_feature_dfs = pd.concat(final_feature_dfs, axis=1)
 # filter by threshold of not null values
-thresh = 0.8
-df = df[
-    [col for col in df.columns if df[col].notnull().sum() > df[col].shape[0] * thresh]
-]
-# drop null rows
-df.dropna(axis=0, inplace=True)
-df.drop(["Unnamed: 3", "Attendance_TRUTH_x", "Attendance"], axis=1, inplace=True)
+final_feature_dfs.dropna(
+    axis=1, thresh=int(final_feature_dfs.shape[0] * 0.8), inplace=True
+)
+
+final_feature_dfs.dropna(axis=0, inplace=True)
+
+final_feature_dfs = final_feature_dfs.loc[:, ~final_feature_dfs.columns.duplicated()]
+
+df = final_feature_dfs.copy()
 
 df["Rank_Diff"] = (df["HomeTeam_Rank"] - df["VisitingTeam_Rank"]).abs()
+
+team_codes = {
+    "SDP": "San Diego",
+    "STL": "St. Louis",
+    "CHW": "Chicago",
+    "MIL": "Milwaukee",
+    "BAL": "Baltimore",
+    "TEX": "Texas",
+    "TOR": "Toronto",
+    "KCR": "Kansas City",
+    "HOU": "Houston",
+    "ATL": "Atlanta",
+    "PIT": "Pittsburgh",
+    "WAS": "Washington",
+    "SFG": "San Francisco",
+    "MIA": "Miami",
+    "NYY": "New York",
+    "DET": "Detroit",
+    "COL": "Colorado",
+    "CLE": "Cleveland",
+    "BOS": "Boston",
+    "CIN": "Cincinnati",
+    "LAD": "Los Angeles",
+    "ARI": "Arizona",
+    "TBA": "Tampa Bay",
+    "SEA": "Seattle",
+    "CHC": "Chicago",
+    "LAA": "Los Angeles",
+    "PHI": "Philadelphia",
+    "OAK": "Oakland",
+    "NYM": "New York",
+    "MIN": "Minnesota",
+}
+
+df["HomeTeam_City"] = df["HomeTeam"].map(team_codes)
+city_coord = pd.read_csv(DATA_PATH.joinpath("raw", "city_coords.csv"), index_col=0)
+df[["lat", "lng"]] = df["HomeTeam_City"].apply(lambda city: city_coord.loc[city, :])
+
+# gmaps = googlemaps.Client(key=API_KEY)
+
+# Geocoding an address
+# city_coord = {"lat": [], "lng": []}
+# for city in df["HomeTeam_City"].unique():
+#     geocode_result = gmaps.geocode(city)
+#     res = geocode_result[0]["geometry"]["location"]
+#     city_coord["lat"].append(res["lat"])
+#     city_coord["lng"].append(res["lng"])
+
+# city_coord = pd.DataFrame(city_coord, index=np.arange(len(city_coord["lat"])))
+
+# city_coord = pd.concat([pd.Series(df["HomeTeam_City"].unique()), city_coord], axis=1)
+
+# city_coord.to_csv(DATA_PATH.joinpath("raw", "city_coords.csv"))
+
+
+def get_weather(df):
+    weather_df = pd.DataFrame()
+    print("Gathering weather metrics.")
+    for (lt, lg), g in df.groupby(["lat", "lng"]):
+        g = g.sort_values(by=["Date"])
+        start_date = g["Date"].iat[0].strftime("%Y-%m-%d")
+        end_date = g["Date"].iat[-1].strftime("%Y-%m-%d")
+        url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lt}&longitude={lg}&start_date={start_date}&end_date={end_date}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,windspeed_10m_max,windgusts_10m_max,winddirection_10m_dominant&timezone=America%2FNew_York&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch"
+        payload = {}
+        headers = {}
+        response = requests.request("GET", url, headers=headers, data=payload)
+        res = response.json()
+        w = pd.DataFrame(res["daily"])
+        w["Date"] = pd.to_datetime(w["time"], format="%Y-%m-%d")
+        w = pd.merge(
+            left=w,
+            right=g[["Date", "HomeTeam", "VisitingTeam"]],
+            how="inner",
+            on="Date",
+        )
+        weather_df = pd.concat([weather_df, w], axis=0)
+    return weather_df
+
+
+weather = get_weather(df)
+
+df = pd.merge(
+    left=df, right=weather, how="inner", on=["Date", "HomeTeam", "VisitingTeam"]
+).reset_index(drop=True)
+
+# load income and population data
+demographics = pd.read_excel(DATA_PATH.joinpath("processed", "City_data.xlsx"))
+
+demographics = demographics.rename(
+    {"year": "Year", "city_name": "HomeTeam_City"}, axis=1
+)
+
+df = df.merge(
+    demographics[["Year", "HomeTeam_City", "avg_income", "population"]],
+    on=["Year", "HomeTeam_City"],
+    how="inner",
+)
+
+# drop any duplicate rows
+df = df.loc[~df.duplicated(), :]
+
+# print(df.shape)
+# print(df.head())
+# print(df.columns.tolist())
+
 
 CONT_FEATURES = [
     "is_holiday",
@@ -257,23 +365,43 @@ CONT_FEATURES = [
     # "HomeTeam_cLI",
     "HomeTeam_Rank",
     # "HomeTeam_W",
+    # "temperature_2m_max",
+    # "temperature_2m_min",
+    "temperature_2m_mean",
+    "precipitation_sum",
+    "windspeed_10m_max",
+    # "population",
+    # "avg_income",
+    # "lat",
+    # "lng",
+    # "windgusts_10m_max",
+    # "winddirection_10m_dominant",
+    # "HomeTeam_L",
     # "HomeTeam_Streak_count",
     # "HomeTeamGameNumber",
-    # "final_HomeTeam_Rank_1_yr_ago",
-    # "final_HomeTeam_cLI_1_yr_ago",
-    # "final_HomeTeam_W_1_yr_ago",
     # "Rank_Diff",
     # "VisitingTeam_cLI",
     # "VisitingTeam_Rank",
+    # "VisitingTeam_W",
     # "VisitingTeam_L",
     # "VisitingTeam_Streak_count",
     # "VisitingTeamGameNumber",
 ]
-attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, years_ago + 1)]
+
+attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, YEARS_AGO + 1)]
+
+historical_rankings = []
+for y in range(1, YEARS_AGO + 1):
+    for feature in FEATURES:
+        historical_rankings.append(f"final_{feature}_{y}_yr_ago")
+
 CONT_FEATURES.extend(attendance_features)
+CONT_FEATURES.extend(historical_rankings)
+
 
 CAT_FEATURES = [
     "BallParkID",
+    "HomeTeam_City",
     "Dayofweek",
     "VisitingTeam",
     "VisitingTeamLeague",
@@ -294,8 +422,12 @@ to = TabularPandas(
 
 dls = to.dataloaders(bs=64)
 
-learn = tabular_learner(dls, metrics=mae, layers=[200, 100])  # default is [200, 100]
-learn.fit_one_cycle(10)
+cardinalities = df[CAT_FEATURES].nunique().to_numpy()
+emb_szs = {cat: min(50, card//2) for cat, card in zip(CAT_FEATURES, cardinalities)}
+
+config = tabular_config(y_range=[0, 75000], act_cls=nn.GELU())
+learn = tabular_learner(dls, metrics=mae, layers=[1000, 500, 250], emb_szs=emb_szs, config=config)  # default is [200, 100]
+learn.fit_one_cycle(25)
 
 
 # function to embed features ,obtained from fastai forums
