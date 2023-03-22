@@ -4,7 +4,7 @@ from pathlib import Path
 from fastai.tabular.all import *
 
 DATA_PATH = Path('../../data')
-YEAR = 2000
+YEAR = 2009
 NOT_INCLUDE_YEARS = [2020] # COVID year
 
 df = pd.read_parquet(DATA_PATH.joinpath('processed', 'game_logs_standings.parquet'))

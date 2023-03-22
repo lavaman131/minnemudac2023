@@ -47,6 +47,5 @@ XGB_PARAMS = {
 
 # catboost params
 CB_PARAMS = {
-    "n_estimators": 1500,
-    # "learning_rate": 0.14,
+    "n_estimators": 1400,
 }
