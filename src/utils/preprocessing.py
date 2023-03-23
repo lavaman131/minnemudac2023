@@ -426,7 +426,7 @@ learn, to_train = init_model(
     y_names="Attendance_TRUTH_y",
 )
 
-learn.fit_one_cycle(1)
+learn.fit_one_cycle(25)
 learn.save(MODEL_PATH.joinpath("embed_nn.pth"))
 
 
