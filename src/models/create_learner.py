@@ -1,6 +1,7 @@
 from fastai.tabular.all import *
 import pandas as pd
 import numpy as np
+import torch
 from torch import nn
 from typing import List, Union
 
@@ -22,30 +23,35 @@ def init_model(
         cont_names=cont_names,
         y_names=y_names,
         splits=splits,
+        device=device
     )
 
     dls = to.dataloaders(bs=64)
 
-    cardinalities = df[cat_names].nunique().to_numpy()
-    emb_szs = {cat: min(50, card // 2) for cat, card in zip(cat_names, cardinalities)}
+    emb_szs = [(43, 21), (28, 13), (8, 3), (31, 15), (3, 1), (31, 15), (3, 1)]
 
-    config = tabular_config(y_range=[0, 120000], act_cls=nn.GELU())
+    model = TabularModel(
+        emb_szs=emb_szs,
+        n_cont=len(cont_names),
+        out_sz=1,
+        layers=[1000, 500, 250],
+        y_range=[0, 120000],
+        act_cls=nn.GELU(),
+    ).to(device)
 
-    learn = tabular_learner(
-        dls, metrics=mae, layers=[1000, 500, 250], emb_szs=emb_szs, config=config
-    )
+    learn = TabularLearner(dls, model, metrics=mae)
 
     if save_model_path:
-        learn = learn.load(save_model_path, device=device)
+        learn = learn.load(save_model_path, device=device).eval()
 
-    return learn
+    return learn, to
 
 
 # function to embed features ,obtained from fastai forums
-def embed_features(learner, df, device):
+def embed_features(learner, df, cat_names, device):
     df = df.copy()
-    for i, feature in enumerate(learner.dls.cat_names):
-        emb = learner.model.embeds[i]
+    for i, feature in enumerate(cat_names):
+        emb = learner.embeds[i]
         new_feat = pd.DataFrame(
             emb(tensor(df[feature], dtype=torch.int64, device=device)),
             index=df.index,

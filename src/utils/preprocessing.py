@@ -6,12 +6,13 @@ from typing import List
 from fastai.tabular.all import *
 import requests
 from src.models.create_learner import init_model, embed_features
+import torch
 
 
 YEARS_AGO = 1
 YEAR = 2009
 NOT_INCLUDE_YEARS = [2020]  # COVID year
-FEATURES = ["HomeTeam_Rank", "HomeTeam_W"]
+FEATURES = ["Attendance_TRUTH_y", "HomeTeam_Rank", "HomeTeam_W"]
 DATA_PATH = Path("../../data")
 MODEL_PATH = Path("../../models")
 
@@ -213,65 +214,46 @@ df.drop(
     inplace=True,
 )
 
+df = df.sort_values(by="Date", axis=0).reset_index(drop=True)
+
 
 # get previous year metrics
-def get_previous_year_metrics(df, feature, yrs_ago=1):
-    group = df.groupby(["Year", "HomeTeam"])
+def get_previous_year_metrics(df, feature, yrs_ago=1, get_last=True):
+    df_cp = df.copy()
+    # Set the index of the DataFrame to be a DateTimeIndex
+    group = df_cp.groupby(["Year", "HomeTeam"])
     print(f"Extracting final {feature} for {yrs_ago} yr ago")
     new_col_name = f"final_{feature}_{yrs_ago}_yr_ago"
-    last_feature = group[feature].transform(lambda x: x.max(skipna=True))
     filtered_group = group.filter(
-        lambda x: df.Year.min() + yrs_ago <= x["Year"].max() <= df.Year.max()
+        lambda x: df_cp.Year.min() + yrs_ago <= x.Year.max() <= df_cp.Year.max()
     )
-    filtered_group[new_col_name] = last_feature.shift(yrs_ago)
+    if get_last:
+        agg_feature = group[feature].transform(lambda x: x.max(skipna=True))
+    else:
+        agg_feature = group[feature].transform(lambda x: x.mean(skipna=True))
+
+    # Create a new DataFrame with the values shifted by a certain number of years
+    filtered_group[new_col_name] = agg_feature.shift(yrs_ago)
+
     return filtered_group
 
 
-def get_avg_attendance(df, yrs_ago=1):
-    group = df.groupby(["Year", "HomeTeam", "VisitingTeam"])
-    print(f"Extracting average attendance for {yrs_ago} yr ago")
-    new_col_name = f"avg_attendance_{yrs_ago}_yr_ago"
-    avg_attendance = group["Attendance_TRUTH_y"].transform(
-        lambda x: x.mean(skipna=True)
+final_feature_df = []
+for feature in FEATURES:
+    d = get_previous_year_metrics(
+        df,
+        feature,
+        yrs_ago=1,
+        get_last=False if feature == "Attendance_TRUTH_y" else True,
     )
-    filtered_group = group.filter(
-        lambda x: df.Year.min() + yrs_ago <= x["Year"].max() <= df.Year.max()
-    )
-    filtered_group[new_col_name] = avg_attendance.shift(yrs_ago)
-    return filtered_group
+    final_feature_df.append(d)
+df = pd.concat(final_feature_df, axis=1)
 
+# drop any duplicate rows and columns
+df = df.loc[~df.duplicated(), :].reset_index(drop=True)
+df = df.loc[:, ~df.columns.duplicated()]
+# df.dropna(axis=1, inplace=True)
 
-final_feature_dfs = []
-for y in range(1, YEARS_AGO + 1):
-    df_with_avg_attendance = get_avg_attendance(df=df, yrs_ago=y).copy()
-    df_with_avg_attendance = df_with_avg_attendance
-
-    feature_df = []
-    for feature in FEATURES:
-        df_with_final_feature = get_previous_year_metrics(
-            df=df, feature=feature, yrs_ago=y
-        ).copy()
-        feature_df.append(
-            df_with_final_feature[
-                ["Date", "HomeTeam", "VisitingTeam", f"final_{feature}_{y}_yr_ago"]
-            ]
-        )
-    feature_df = pd.concat(feature_df, axis=1)
-
-    d = pd.concat([df_with_avg_attendance, feature_df], axis=1)
-    final_feature_dfs.append(d.loc[:, ~d.columns.duplicated()])
-
-final_feature_dfs = pd.concat(final_feature_dfs, axis=1)
-# filter by threshold of not null values
-final_feature_dfs.dropna(
-    axis=1, thresh=int(final_feature_dfs.shape[0] * 0.8), inplace=True
-)
-
-final_feature_dfs.dropna(axis=0, inplace=True)
-
-final_feature_dfs = final_feature_dfs.loc[:, ~final_feature_dfs.columns.duplicated()]
-
-df = final_feature_dfs.copy()
 
 df["Rank_Diff"] = (df["HomeTeam_Rank"] - df["VisitingTeam_Rank"]).abs()
 
@@ -314,55 +296,60 @@ city_coord = pd.read_csv(DATA_PATH.joinpath("raw", "city_coords.csv"), index_col
 df[["lat", "lng"]] = df["HomeTeam_City"].apply(lambda city: city_coord.loc[city, :])
 
 
-def get_weather(df):
-    weather_df = pd.DataFrame()
-    print("Gathering weather metrics.")
-    for (lt, lg), g in df.groupby(["lat", "lng"]):
-        g = g.sort_values(by=["Date"])
-        start_date = g["Date"].iat[0].strftime("%Y-%m-%d")
-        end_date = g["Date"].iat[-1].strftime("%Y-%m-%d")
-        url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lt}&longitude={lg}&start_date={start_date}&end_date={end_date}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,windspeed_10m_max,windgusts_10m_max,winddirection_10m_dominant&timezone=America%2FNew_York&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch"
-        payload = {}
-        headers = {}
-        response = requests.request("GET", url, headers=headers, data=payload)
-        res = response.json()
-        w = pd.DataFrame(res["daily"])
-        w["Date"] = pd.to_datetime(w["time"], format="%Y-%m-%d")
-        w = pd.merge(
-            left=w,
-            right=g[["Date", "HomeTeam", "VisitingTeam"]],
-            how="inner",
-            on="Date",
-        )
-        weather_df = pd.concat([weather_df, w], axis=0)
-    return weather_df
+# def get_weather(df):
+#     weather_df = pd.DataFrame()
+#     print("Gathering weather metrics.")
+#     for (lt, lg), g in df.groupby(["lat", "lng"]):
+#         g = g.sort_values(by=["Date"])
+#         start_date = g["Date"].iat[0].strftime("%Y-%m-%d")
+#         end_date = g["Date"].iat[-1].strftime("%Y-%m-%d")
+#         url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lt}&longitude={lg}&start_date={start_date}&end_date={end_date}&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,windspeed_10m_max,windgusts_10m_max,winddirection_10m_dominant&timezone=America%2FNew_York&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch"
+#         payload = {}
+#         headers = {}
+#         response = requests.request("GET", url, headers=headers, data=payload)
+#         res = response.json()
+#         w = pd.DataFrame(res["daily"])
+#         w["Date"] = pd.to_datetime(w["time"], format="%Y-%m-%d")
+#         w = pd.merge(
+#             left=w,
+#             right=g[["Date", "HomeTeam", "VisitingTeam"]],
+#             how="inner",
+#             on="Date",
+#         )
+#         weather_df = pd.concat([weather_df, w], axis=0)
+#     return weather_df
 
 
-weather = get_weather(df)
+# weather = get_weather(df)
 
-df = pd.merge(
-    left=df, right=weather, how="inner", on=["Date", "HomeTeam", "VisitingTeam"]
-).reset_index(drop=True)
+# df = pd.merge(
+#     left=df, right=weather, how="inner", on=["Date", "HomeTeam", "VisitingTeam"]
+# ).reset_index(drop=True)
 
-# load income and population data
-demographics = pd.read_excel(DATA_PATH.joinpath("processed", "City_data.xlsx"))
+# # load income and population data
+# demographics = pd.read_excel(DATA_PATH.joinpath("processed", "City_data.xlsx"))
 
-demographics = demographics.rename(
-    {"year": "Year", "city_name": "HomeTeam_City"}, axis=1
-)
+# demographics = demographics.rename(
+#     {"year": "Year", "city_name": "HomeTeam_City"}, axis=1
+# )
 
-df = df.merge(
-    demographics[["Year", "HomeTeam_City", "avg_income", "population"]],
-    on=["Year", "HomeTeam_City"],
-    how="inner",
-)
+# df = df.merge(
+#     demographics[["Year", "HomeTeam_City", "avg_income", "population"]],
+#     on=["Year", "HomeTeam_City"],
+#     how="inner",
+# )
 
 # drop any duplicate rows and columns
 df = df.loc[~df.duplicated(), :].reset_index(drop=True)
 df = df.loc[:, ~df.columns.duplicated()]
 df.drop("Elapsed", axis=1, inplace=True)
+df.dropna(axis=1, inplace=True, thresh=int(df.shape[0] * 0.2))
 df.dropna(axis=0, inplace=True)
-# df.dropna(axis=1, inplace=True)
+
+
+print(df.columns)
+
+print(df.head())
 
 
 CONT_FEATURES = [
@@ -384,9 +371,9 @@ CONT_FEATURES = [
     # "HomeTeam_W",
     # "temperature_2m_max",
     # "temperature_2m_min",
-    "temperature_2m_mean",
-    "precipitation_sum",
-    "windspeed_10m_max",
+    # "temperature_2m_mean",
+    # "precipitation_sum",
+    # "windspeed_10m_max",
     # "population",
     # "avg_income",
     # "lat",
@@ -405,15 +392,13 @@ CONT_FEATURES = [
     # "VisitingTeamGameNumber",
 ]
 
-attendance_features = [f"avg_attendance_{y}_yr_ago" for y in range(1, YEARS_AGO + 1)]
 
-historical_rankings = []
+historical_data = []
 for y in range(1, YEARS_AGO + 1):
     for feature in FEATURES:
-        historical_rankings.append(f"final_{feature}_{y}_yr_ago")
+        historical_data.append(f"final_{feature}_{y}_yr_ago")
 
-CONT_FEATURES.extend(attendance_features)
-CONT_FEATURES.extend(historical_rankings)
+CONT_FEATURES.extend(historical_data)
 
 CAT_FEATURES = [
     "BallParkID",
@@ -431,8 +416,10 @@ df_train = df.drop(index=df_test.index)
 df_train.reset_index(drop=True, inplace=True)
 df_test.reset_index(drop=True, inplace=True)
 
+print(df_test.dtypes.tolist())
+
 # TRAIN SET PREPROCESSING and TEST SET PREPROCESSING
-learn = init_model(
+learn, to_train = init_model(
     df=df_train,
     cat_names=CAT_FEATURES,
     cont_names=CONT_FEATURES,
@@ -442,24 +429,27 @@ learn = init_model(
 learn.fit_one_cycle(1)
 learn.save(MODEL_PATH.joinpath("embed_nn.pth"))
 
-learn = init_model(
+
+learn, to_test = init_model(
     df=df_test,
     cat_names=CAT_FEATURES,
     cont_names=CONT_FEATURES,
     y_names="Attendance_TRUTH_y",
     save_model_path=MODEL_PATH.joinpath("embed_nn.pth"),
-    device="mps",
+    device="mps"
 )
 
 embeddings_train = embed_features(
     learner=learn,
-    df=df_train,
+    df=to_train.all_cols,
+    cat_names=CAT_FEATURES,
     device="mps",
 )
 
 embeddings_test = embed_features(
     learner=learn,
-    df=df_test,
+    df=to_test.all_cols,
+    cat_names=CAT_FEATURES,
     device="mps",
 )
 
