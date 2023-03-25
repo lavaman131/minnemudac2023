@@ -51,5 +51,27 @@ reg = reg.load_model(MODEL_PATH.joinpath("catboost.cbm"))
 reg = reg.fit(X_train, y_train)
 y_pred_catboost = reg.predict(X_test)
 
-preds = pd.DataFrame({'lin_reg': y_pred_linreg, 'catboost': y_pred_catboost})
+important_features = ['median_Attendance_TRUTH_y_2_yr_ago',
+ 'median_Attendance_TRUTH_y_1_yr_ago',
+ 'Dayofweek',
+ 'Dayofyear',
+ 'Year',
+ 'VisitingTeam',
+ 'HomeTeam',
+ 'final_HomeTeam_cLI_1_yr_ago',
+ 'final_VisitingTeam_cLI_1_yr_ago',
+ 'final_HomeTeam_W_2_yr_ago',
+ 'final_HomeTeam_cLI_2_yr_ago',
+ 'Week',
+ 'final_HomeTeam_W_1_yr_ago',
+ 'final_VisitingTeam_cLI_2_yr_ago',
+ 'final_VisitingTeam_W_1_yr_ago',
+ 'final_VisitingTeam_W_2_yr_ago',
+ 'final_HomeTeam_Rank_1_yr_ago',
+ 'HomeTeamLeague',
+ 'Month',
+ 'VisitingTeamLeague']
+
+preds = pd.DataFrame({'lin_reg_y': y_pred_linreg, 'catboost_y': y_pred_catboost, 'y_true': y_test})
+preds = pd.concat([preds, X_test[important_features]], axis=1)
 preds.to_csv(DATA_PATH.joinpath("business_insights.csv"))
