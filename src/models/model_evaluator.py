@@ -48,10 +48,11 @@ MODEL_PATH = Path("/Users/alilavaee/Documents/minnemudac2023/models")
 RANDOM_STATE = 42
 BS = 64
 DEVICE = "mps"
-EVAL_TEST = False
+EVAL_TEST = True
 
 
 DATA_PATH = Path("/Users/alilavaee/Documents/minnemudac2023/data")
+MODEL_PATH = Path("/Users/alilavaee/Documents/minnemudac2023/models")
 
 
 # * NOT EMBEDDED DATA
@@ -164,6 +165,7 @@ for model in ML_MODELS:
         model = model.fit(X_train, y_train)
     elif isinstance(model, CatBoostRegressor):
         model = model.fit(X_train, y_train, verbose=False)
+        model.save_model(MODEL_PATH.joinpath("catboost.cbm"))
     elif isinstance(model, LinearRegression):
         model = model.fit(X_train[CONT_FEATURES], y_train)
 

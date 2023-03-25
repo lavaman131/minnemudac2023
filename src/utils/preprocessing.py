@@ -8,7 +8,7 @@ import requests
 
 # * BEST performance is 2012 for YEAR and YEARS_AGO is 3
 #! note to change YEARS_AGO in features.py
-YEARS_AGO = 3
+YEARS_AGO = 2
 YEAR = 2012
 NOT_INCLUDE_YEARS = []  # COVID year
 DATA_PATH = Path("/Users/alilavaee/Documents/minnemudac2023/data")

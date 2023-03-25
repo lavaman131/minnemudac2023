@@ -1,6 +1,6 @@
 import numpy as np
 
-YEARS_AGO = 3
+YEARS_AGO = 2
 
 CONT_FEATURES = [
     "is_holiday",
