@@ -165,7 +165,7 @@ for model in ML_MODELS:
         model = model.fit(X_train, y_train)
     elif isinstance(model, CatBoostRegressor):
         model = model.fit(X_train, y_train, verbose=False)
-        model.save_model(MODEL_PATH.joinpath("catboost.cbm"))
+        # model.save_model(MODEL_PATH.joinpath("catboost.cbm"))
     elif isinstance(model, LinearRegression):
         model = model.fit(X_train[CONT_FEATURES], y_train)
 
@@ -186,6 +186,6 @@ for model in ML_MODELS:
         print(f"RMSE: {RMSE}")
     print()
 
-model_performances = pd.DataFrame(model_performances, index=np.arange(len(model_performances["Model_Name"])))
+# model_performances = pd.DataFrame(model_performances, index=np.arange(len(model_performances["Model_Name"])))
 
-model_performances.to_csv(REPORTS.joinpath("model_performances.csv"))
+# model_performances.to_csv(REPORTS.joinpath("model_performances.csv"))
