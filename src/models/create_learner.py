@@ -4,31 +4,43 @@ import numpy as np
 import torch
 from torch import nn
 from typing import List, Union
+from fastai.losses import BaseLoss
 
 
-def init_model(
-    df: pd.DataFrame,
+class RMSELoss(BaseLoss):
+    "Root Mean Squared Error loss"
+
+    def __init__(self, *args, axis=-1, floatify=True, **kwargs):
+        super().__init__(
+            nn.MSELoss, *args, axis=axis, floatify=floatify, is_2d=False, **kwargs
+        )
+
+    def __call__(self, inp, targ, **kwargs):
+        return super().__call__(torch.sqrt(inp), torch.sqrt(targ), **kwargs)
+
+
+def embedding_rule(n_cats: int):
+    return min(50, n_cats // 2)
+
+
+def create_model(
+    dls: TabularDataLoaders,
+    metrics,
+    loss_func,
     cat_names: List[str],
     cont_names: List[str],
-    y_names: str,
+    training: bool = True,
     save_model_path: Union[None, str] = None,
     device: str = None,
 ) -> Learner:
-    splits = RandomSplitter(valid_pct=0.2)(range_of(df))
 
-    to = TabularPandas(
-        df,
-        procs=[Categorify, FillMissing, Normalize],
-        cat_names=cat_names,
-        cont_names=cont_names,
-        y_names=y_names,
-        splits=splits,
-        device=device
-    )
-
-    dls = to.dataloaders(bs=64)
-
-    emb_szs = [(43, 21), (28, 13), (8, 3), (31, 15), (3, 1), (31, 15), (3, 1)]
+    emb_szs = [
+        (
+            len(np.unique(dls.train_ds[cat])),
+            embedding_rule(len(np.unique(dls.train_ds[cat]))),
+        )
+        for cat in cat_names
+    ]
 
     model = TabularModel(
         emb_szs=emb_szs,
@@ -39,12 +51,15 @@ def init_model(
         act_cls=nn.GELU(),
     ).to(device)
 
-    learn = TabularLearner(dls, model, metrics=mae)
+    learn = TabularLearner(dls, model, metrics=metrics, loss_func=loss_func)
 
-    if save_model_path:
-        learn = learn.load(save_model_path, device=device).eval()
+    if not training:
+        if save_model_path:
+            learn = learn.load(save_model_path, device=device)
+        else:
+            raise ValueError("Must specify model path if not training.")
 
-    return learn, to
+    return learn
 
 
 # function to embed features ,obtained from fastai forums

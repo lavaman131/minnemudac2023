@@ -5,23 +5,32 @@ from pathlib import Path
 from typing import List
 from fastai.tabular.all import *
 import requests
-from src.models.create_learner import init_model, embed_features
-import torch
 
+# * BEST performance is 2012 for YEAR and YEARS_AGO is 3
+#! note to change YEARS_AGO in features.py
+YEARS_AGO = 3
+YEAR = 2012
+NOT_INCLUDE_YEARS = []  # COVID year
+DATA_PATH = Path("/Users/alilavaee/Documents/minnemudac2023/data")
 
-YEARS_AGO = 1
-YEAR = 2009
-NOT_INCLUDE_YEARS = [2020]  # COVID year
-FEATURES = ["Attendance_TRUTH_y", "HomeTeam_Rank", "HomeTeam_W"]
-DATA_PATH = Path("../../data")
-MODEL_PATH = Path("../../models")
+LAST_FEATURES = [
+    "HomeTeam_cLI",
+    "HomeTeam_Rank",
+    "HomeTeam_W",
+    "VisitingTeam_cLI",
+    "VisitingTeam_Rank",
+    "VisitingTeam_W",
+]
+
+AVG_FEATURES = ["Attendance_TRUTH_y"]
 
 df = pd.read_parquet(DATA_PATH.joinpath("processed", f"game_logs_standings.parquet"))
 
 df = add_datepart(df, "Date", drop=False)
 
 df = df.loc[df.Year >= YEAR, :]
-df = df.loc[~df.Year.isin(NOT_INCLUDE_YEARS), :]
+if len(NOT_INCLUDE_YEARS) > 0:
+    df = df.loc[~df.Year.isin(NOT_INCLUDE_YEARS), :]
 
 
 # helper function
@@ -33,74 +42,74 @@ def to_numerical(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     return data
 
 
-# arena_capacity = {
-#     "Angel Stadium of Anaheim": 45050,
-#     "Rangers Ballpark in Arlington": 49115,
-#     "Globe Life Field in Arlington": 40738,
-#     "Turner Field": 49586,
-#     "Suntrust Park": 41149,
-#     "Oriole Park at Camden Yards": 45971,
-#     "Fenway Park": 37755,
-#     "Sahlen Field": 16806,
-#     "Wrigley Field": 41915,
-#     "Guaranteed Rate Field;U.S. Cellular Field": 40615,
-#     "Cinergy Field": 40545,
-#     "Great American Ballpark": 42319,
-#     "Progressive Field": 35041,
-#     "Coors Field": 50144,
-#     "Comerica Park": 41083,
-#     "TD Ballpark": 8500,
-#     "Field of Dreams": 8000,
-#     "Fort Bragg Field": 12000,
-#     "Minute Maid Park": 41168,
-#     "Kauffman Stadium": 37903,
-#     "The Ballpark at Disney's Wide World": 11500,
-#     "London Stadium": 60000,
-#     "Dodger Stadium": 56000,
-#     "Sun Life Stadium": 34742,
-#     "Marlins Park": 36742,
-#     "County Stadium": 53000,
-#     "Miller Park": 41828,
-#     "Hubert H. Humphrey Metrodome": 55333,
-#     "Target Field": 38949,
-#     "Estadio Monterrey": 27702,
-#     "Stade Olympique": 45623,
-#     "Yankee Stadium I": 56703,
-#     "Shea Stadium": 57000,
-#     "Citi Field": 41922,
-#     "Yankee Stadium II": 54251,
-#     "Oakland-Alameda County Coliseum": 46796,
-#     "TD Ameritrade Park": 24000,
-#     "Veterans Stadium": 62546,
-#     "Citizens Bank Park": 42793,
-#     "Chase Field": 48519,
-#     "Three Rivers Stadium": 59000,
-#     "PNC Park": 38362,
-#     "Qualcomm Stadium": 70561,
-#     "PETCO Park": 40845,
-#     "Safeco Field": 47943,
-#     "AT&T Park": 41915,
-#     "Estadio Hiram Bithorn": 19100,
-#     "Busch Stadium II": 50553,
-#     "Busch Stadium III": 43975,
-#     "Tropicana Field": 31042,
-#     "Sydney Cricket Ground": 48000,
-#     "Tokyo Dome": 55000,
-#     "Rogers Centre": 53340,
-#     "Robert F. Kennedy Stadium": 56638,
-#     "Nationals Park": 41168,
-#     "BB&T Ballpark at Bowman Field": 2300,
-# }
+arena_capacity = {
+    "Angel Stadium of Anaheim": 45050,
+    "Rangers Ballpark in Arlington": 49115,
+    "Globe Life Field in Arlington": 40738,
+    "Turner Field": 49586,
+    "Suntrust Park": 41149,
+    "Oriole Park at Camden Yards": 45971,
+    "Fenway Park": 37755,
+    "Sahlen Field": 16806,
+    "Wrigley Field": 41915,
+    "Guaranteed Rate Field;U.S. Cellular Field": 40615,
+    "Cinergy Field": 40545,
+    "Great American Ballpark": 42319,
+    "Progressive Field": 35041,
+    "Coors Field": 50144,
+    "Comerica Park": 41083,
+    "TD Ballpark": 8500,
+    "Field of Dreams": 8000,
+    "Fort Bragg Field": 12000,
+    "Minute Maid Park": 41168,
+    "Kauffman Stadium": 37903,
+    "The Ballpark at Disney's Wide World": 11500,
+    "London Stadium": 60000,
+    "Dodger Stadium": 56000,
+    "Sun Life Stadium": 34742,
+    "Marlins Park": 36742,
+    "County Stadium": 53000,
+    "Miller Park": 41828,
+    "Hubert H. Humphrey Metrodome": 55333,
+    "Target Field": 38949,
+    "Estadio Monterrey": 27702,
+    "Stade Olympique": 45623,
+    "Yankee Stadium I": 56703,
+    "Shea Stadium": 57000,
+    "Citi Field": 41922,
+    "Yankee Stadium II": 54251,
+    "Oakland-Alameda County Coliseum": 46796,
+    "TD Ameritrade Park": 24000,
+    "Veterans Stadium": 62546,
+    "Citizens Bank Park": 42793,
+    "Chase Field": 48519,
+    "Three Rivers Stadium": 59000,
+    "PNC Park": 38362,
+    "Qualcomm Stadium": 70561,
+    "PETCO Park": 40845,
+    "Safeco Field": 47943,
+    "AT&T Park": 41915,
+    "Estadio Hiram Bithorn": 19100,
+    "Busch Stadium II": 50553,
+    "Busch Stadium III": 43975,
+    "Tropicana Field": 31042,
+    "Sydney Cricket Ground": 48000,
+    "Tokyo Dome": 55000,
+    "Rogers Centre": 53340,
+    "Robert F. Kennedy Stadium": 56638,
+    "Nationals Park": 41168,
+    "BB&T Ballpark at Bowman Field": 2300,
+}
 
-# stadiums = pd.read_csv(DATA_PATH.joinpath("raw", "stadiums.csv"))
-# stadiums = stadiums.loc[
-#     stadiums.PARKID.isin(df["BallParkID"]), ["PARKID", "NAME"]
-# ].reset_index(drop=True)
+stadiums = pd.read_csv(DATA_PATH.joinpath("raw", "stadiums.csv"))
+stadiums = stadiums.loc[
+    stadiums.PARKID.isin(df["BallParkID"]), ["PARKID", "NAME"]
+].reset_index(drop=True)
 
-# stadiums["capacity"] = stadiums.NAME.map(arena_capacity)
+stadiums["capacity"] = stadiums.NAME.map(arena_capacity)
 
-# mapping = dict(zip(stadiums.PARKID, stadiums.capacity))
-# df["Stadium_Capacity"] = df["BallParkID"].map(mapping)
+mapping = dict(zip(stadiums.PARKID, stadiums.capacity))
+df["Stadium_Capacity"] = df["BallParkID"].map(mapping)
 
 
 rev_mapping = {
@@ -180,9 +189,6 @@ df["VisitingTeamLeague"] = df["VisitingTeam"].map(leagues)
 df["HomeTeamLeague"] = df["HomeTeam"].map(leagues)
 
 df.reset_index(inplace=True, drop=True)
-df[["StadiumID", "VisitingTeamLeague", "HomeTeamLeague"]] = to_numerical(
-    df, ["BallParkID", "VisitingTeamLeague", "HomeTeamLeague"]
-)
 
 
 # collect wins and losses for home team
@@ -204,9 +210,9 @@ df["is_holiday"] = df["Date"].apply(lambda d: d in holidays).astype("int")
 
 df["season"] = df["Month"] % 12 // 3 + 1
 
-df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_numerical(
-    df, ["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]
-)
+# df[["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]] = to_numerical(
+#     df, ["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]
+# )
 
 df.drop(
     ["Unnamed: 3", "Unnamed: 5", "Attendance_TRUTH_x", "Attendance"],
@@ -217,42 +223,88 @@ df.drop(
 df = df.sort_values(by="Date", axis=0).reset_index(drop=True)
 
 
-# get previous year metrics
 def get_previous_year_metrics(df, feature, yrs_ago=1, get_last=True):
     df_cp = df.copy()
     # Set the index of the DataFrame to be a DateTimeIndex
-    group = df_cp.groupby(["Year", "HomeTeam"])
-    print(f"Extracting final {feature} for {yrs_ago} yr ago")
-    new_col_name = f"final_{feature}_{yrs_ago}_yr_ago"
-    filtered_group = group.filter(
-        lambda x: df_cp.Year.min() + yrs_ago <= x.Year.max() <= df_cp.Year.max()
-    )
+    group = df.groupby(["Year", "HomeTeam"])
     if get_last:
-        agg_feature = group[feature].transform(lambda x: x.max(skipna=True))
+        new_col_name = f"final_{feature}_{yrs_ago}_yr_ago"
+        print(f"Extracting final {feature} for {yrs_ago} yr ago")
     else:
-        agg_feature = group[feature].transform(lambda x: x.mean(skipna=True))
+        new_col_name = f"median_{feature}_{yrs_ago}_yr_ago"
+        print(f"Extracting median {feature} for {yrs_ago} yr ago")
+    if get_last:
+        for idx, row in df_cp.iterrows():
+            try:
+                prev_metric = np.median(group.get_group((row.Year - 1, row.HomeTeam))[
+                    feature
+                ])
+                df_cp.loc[idx, new_col_name] = prev_metric
+            except:
+                df_cp.loc[idx, new_col_name] = np.nan
+    else:
+        for idx, row in df.iterrows():
+            try:
+                prev_metric = group.get_group((row.Year - 1, row.HomeTeam))[
+                    feature
+                ].mean()
+                df_cp.loc[idx, new_col_name] = prev_metric
+            except:
+                df_cp.loc[idx, new_col_name] = np.nan
 
-    # Create a new DataFrame with the values shifted by a certain number of years
-    filtered_group[new_col_name] = agg_feature.shift(yrs_ago)
-
-    return filtered_group
+    return df_cp
 
 
 final_feature_df = []
-for feature in FEATURES:
-    d = get_previous_year_metrics(
-        df,
-        feature,
-        yrs_ago=1,
-        get_last=False if feature == "Attendance_TRUTH_y" else True,
-    )
-    final_feature_df.append(d)
+for y in range(1, YEARS_AGO + 1):
+    for feature in LAST_FEATURES:
+        d = get_previous_year_metrics(
+            df,
+            feature,
+            yrs_ago=y,
+            get_last=True,
+        )
+        final_feature_df.append(d)
+
+    for feature in AVG_FEATURES:
+        d = get_previous_year_metrics(
+            df,
+            feature,
+            yrs_ago=y,
+            get_last=False,
+        )
+        final_feature_df.append(d)
 df = pd.concat(final_feature_df, axis=1)
 
 # drop any duplicate rows and columns
 df = df.loc[~df.duplicated(), :].reset_index(drop=True)
 df = df.loc[:, ~df.columns.duplicated()]
-# df.dropna(axis=1, inplace=True)
+
+# "HomeTeam_cLI",
+# "HomeTeam_Rank",
+# "Stadium_Capacity",
+# "HomeTeam_W",
+# "temperature_2m_max",
+# "temperature_2m_min",
+# "temperature_2m_mean",
+# "precipitation_sum",
+# "windspeed_10m_max",
+# "population",
+# "avg_income",
+# "lat",
+# "lng",
+# "windgusts_10m_max",
+# "winddirection_10m_dominant",
+# "HomeTeam_L",
+# "HomeTeam_Streak_count",
+# "HomeTeamGameNumber",
+# "Rank_Diff",
+# "VisitingTeam_cLI",
+# "VisitingTeam_Rank",
+# "VisitingTeam_W",
+# "VisitingTeam_L",
+# "VisitingTeam_Streak_count",
+# "VisitingTeamGameNumber",
 
 
 df["Rank_Diff"] = (df["HomeTeam_Rank"] - df["VisitingTeam_Rank"]).abs()
@@ -322,11 +374,21 @@ df[["lat", "lng"]] = df["HomeTeam_City"].apply(lambda city: city_coord.loc[city,
 
 # weather = get_weather(df)
 
+# print(weather.head())
+
 # df = pd.merge(
-#     left=df, right=weather, how="inner", on=["Date", "HomeTeam", "VisitingTeam"]
+#     left=df,
+#     right=weather,
+#     how="inner",
+#     on=["Date", "HomeTeam"],
+#     suffixes=("", "_remove"),
 # ).reset_index(drop=True)
 
-# # load income and population data
+# df.drop([i for i in df.columns if "remove" in i], axis=1, inplace=True)
+
+# print(df.head())
+
+# load income and population data
 # demographics = pd.read_excel(DATA_PATH.joinpath("processed", "City_data.xlsx"))
 
 # demographics = demographics.rename(
@@ -339,17 +401,42 @@ df[["lat", "lng"]] = df["HomeTeam_City"].apply(lambda city: city_coord.loc[city,
 #     how="inner",
 # )
 
+df[
+    [
+        # "StadiumID",
+        "HomeTeam",
+        "VisitingTeam",
+        "HomeTeam_City",
+        "Dayofweek",
+        "VisitingTeamLeague",
+        "HomeTeamLeague",
+    ]
+] = to_numerical(
+    df,
+    [
+        # "BallParkID",
+        "HomeTeam",
+        "VisitingTeam",
+        "HomeTeam_City",
+        "Dayofweek",
+        "VisitingTeamLeague",
+        "HomeTeamLeague",
+    ],
+)
+
 # drop any duplicate rows and columns
 df = df.loc[~df.duplicated(), :].reset_index(drop=True)
 df = df.loc[:, ~df.columns.duplicated()]
 df.drop("Elapsed", axis=1, inplace=True)
 df.dropna(axis=1, inplace=True, thresh=int(df.shape[0] * 0.2))
 df.dropna(axis=0, inplace=True)
-
-
-print(df.columns)
-
 print(df.head())
+
+
+# print(df.columns)
+
+print(df["Attendance_TRUTH_y"].min())
+print(df["Attendance_TRUTH_y"].max())
 
 
 CONT_FEATURES = [
@@ -367,7 +454,8 @@ CONT_FEATURES = [
     "Is_year_end",
     "Is_year_start",
     # "HomeTeam_cLI",
-    "HomeTeam_Rank",
+    # "HomeTeam_Rank",
+    # "Stadium_Capacity",
     # "HomeTeam_W",
     # "temperature_2m_max",
     # "temperature_2m_min",
@@ -392,17 +480,19 @@ CONT_FEATURES = [
     # "VisitingTeamGameNumber",
 ]
 
-
 historical_data = []
 for y in range(1, YEARS_AGO + 1):
-    for feature in FEATURES:
+    for feature in AVG_FEATURES:
+        historical_data.append(f"median_{feature}_{y}_yr_ago")
+
+for y in range(1, YEARS_AGO + 1):
+    for feature in LAST_FEATURES:
         historical_data.append(f"final_{feature}_{y}_yr_ago")
 
 CONT_FEATURES.extend(historical_data)
 
 CAT_FEATURES = [
-    "BallParkID",
-    "HomeTeam_City",
+    # "StadiumID",
     "Dayofweek",
     "VisitingTeam",
     "VisitingTeamLeague",
@@ -410,48 +500,19 @@ CAT_FEATURES = [
     "HomeTeamLeague",
 ]
 
+print("Features:")
+print(CONT_FEATURES + CAT_FEATURES)
+
 df_test = df.sample(frac=0.2, random_state=42)
 df_train = df.drop(index=df_test.index)
 
+df_val = df_train.sample(frac=0.2, random_state=42)
+df_train = df_train.drop(index=df_val.index)
+
 df_train.reset_index(drop=True, inplace=True)
+df_val.reset_index(drop=True, inplace=True)
 df_test.reset_index(drop=True, inplace=True)
 
-print(df_test.dtypes.tolist())
-
-# TRAIN SET PREPROCESSING and TEST SET PREPROCESSING
-learn, to_train = init_model(
-    df=df_train,
-    cat_names=CAT_FEATURES,
-    cont_names=CONT_FEATURES,
-    y_names="Attendance_TRUTH_y",
-)
-
-learn.fit_one_cycle(25)
-learn.save(MODEL_PATH.joinpath("embed_nn.pth"))
-
-
-learn, to_test = init_model(
-    df=df_test,
-    cat_names=CAT_FEATURES,
-    cont_names=CONT_FEATURES,
-    y_names="Attendance_TRUTH_y",
-    save_model_path=MODEL_PATH.joinpath("embed_nn.pth"),
-    device="mps"
-)
-
-embeddings_train = embed_features(
-    learner=learn,
-    df=to_train.all_cols,
-    cat_names=CAT_FEATURES,
-    device="mps",
-)
-
-embeddings_test = embed_features(
-    learner=learn,
-    df=to_test.all_cols,
-    cat_names=CAT_FEATURES,
-    device="mps",
-)
-
-embeddings_train.to_parquet(DATA_PATH.joinpath("processed", "train_embed.parquet"))
-embeddings_test.to_parquet(DATA_PATH.joinpath("processed", "test_embed.parquet"))
+df_train.to_parquet(DATA_PATH.joinpath("processed", "train.parquet"))
+df_val.to_parquet(DATA_PATH.joinpath("processed", "val.parquet"))
+df_test.to_parquet(DATA_PATH.joinpath("processed", "test.parquet"))
