@@ -187,6 +187,6 @@ for model in ML_MODELS:
         print(f"RMSE: {RMSE}")
     print()
 
-# model_performances = pd.DataFrame(model_performances, index=np.arange(len(model_performances["Model_Name"])))
+model_performances = pd.DataFrame(model_performances, index=np.arange(len(model_performances["Model_Name"])))
 
-# model_performances.to_csv(REPORTS.joinpath("model_performances.csv"))
+model_performances.to_csv(REPORTS.joinpath("model_performances.csv"))

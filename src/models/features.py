@@ -16,15 +16,17 @@ CONT_FEATURES = [
     "Is_quarter_start",
     "Is_year_end",
     "Is_year_start",
+    # "final_HomeTeam_WinLossRatio_1_yr_ago",
+    # "final_HomeTeam_WinLossRatio_2_yr_ago",
 ]
 
 LAST_FEATURES = [
-    "HomeTeam_cLI",
     "HomeTeam_Rank",
     "HomeTeam_W",
-    "VisitingTeam_cLI",
+    "HomeTeam_L",
     "VisitingTeam_Rank",
     "VisitingTeam_W",
+    "VisitingTeam_L",
 ]
 
 AVG_FEATURES = ["Attendance_TRUTH_y"]
@@ -33,7 +35,7 @@ historical_data = []
 for y in range(1, YEARS_AGO + 1):
     for feature in AVG_FEATURES:
         historical_data.append(f"median_{feature}_{y}_yr_ago")
-        
+
 for y in range(1, YEARS_AGO + 1):
     for feature in LAST_FEATURES:
         historical_data.append(f"final_{feature}_{y}_yr_ago")
@@ -41,7 +43,7 @@ for y in range(1, YEARS_AGO + 1):
 CONT_FEATURES.extend(historical_data)
 
 CAT_FEATURES = [
-    # "StadiumID",
+    "StadiumID",
     "Dayofweek",
     "VisitingTeam",
     "VisitingTeamLeague",

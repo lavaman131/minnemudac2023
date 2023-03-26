@@ -10,7 +10,9 @@ if __name__ == "__main__":
 
     df_standings["Date"] = pd.to_datetime(df_standings["Date"], format="%Y-%m-%d")
 
-    df_game_logs = pd.read_csv(DATA_PATH.joinpath("raw", "game_logs_full.csv"))
+    df_game_logs = pd.read_csv(
+        DATA_PATH.joinpath("raw", "game_logs.csv"), encoding="UTF-16"
+    )
 
     df_game_logs["Date"] = pd.to_datetime(df_game_logs["Date"], format="%Y%m%d")
 
@@ -20,7 +22,7 @@ if __name__ == "__main__":
         how="inner",
         on=["Date", "HomeTeam", "VisitingTeam"],
     )
-    
+
     merged_df.head()
 
     print(df_game_logs.Date.dt.year.unique())

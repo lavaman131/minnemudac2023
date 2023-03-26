@@ -6,7 +6,7 @@ from typing import List
 from fastai.tabular.all import *
 import requests
 
-# * BEST performance is 2012 for YEAR and YEARS_AGO is 3
+# * BEST performance is 2012 (2014-2019) for YEAR and YEARS_AGO is 2
 #! note to change YEARS_AGO in features.py
 YEARS_AGO = 2
 YEAR = 2012
@@ -14,17 +14,19 @@ NOT_INCLUDE_YEARS = []  # COVID year
 DATA_PATH = Path("/Users/alilavaee/Documents/minnemudac2023/data")
 
 LAST_FEATURES = [
-    "HomeTeam_cLI",
     "HomeTeam_Rank",
     "HomeTeam_W",
-    "VisitingTeam_cLI",
+    "HomeTeam_L",
     "VisitingTeam_Rank",
     "VisitingTeam_W",
+    "VisitingTeam_L",
 ]
 
 AVG_FEATURES = ["Attendance_TRUTH_y"]
 
 df = pd.read_parquet(DATA_PATH.joinpath("processed", f"game_logs_standings.parquet"))
+
+df.dropna(axis=1, thresh=df.shape[0] * 0.8, inplace=True)
 
 df = add_datepart(df, "Date", drop=False)
 
@@ -195,10 +197,18 @@ df.reset_index(inplace=True, drop=True)
 df["W"] = df["W-L"].apply(lambda s: s.split("-")[0]).astype("int")
 df["L"] = df["W-L"].apply(lambda s: s.split("-")[1]).astype("int")
 
+
+def winning_streak_to_int(s):
+    try:
+        return s.count("+") if s.startswith("+") else -1 * s.count("-")
+    except:
+        return None
+
+
 # convert streak to quantitative
-df["Streak_count"] = df["Streak"].apply(
-    lambda s: s.count("+") if s.startswith("+") else -1 * s.count("-")
-)
+df["Streak_count"] = df["Streak"].apply(winning_streak_to_int)
+
+df.dropna(axis=0, inplace=True)
 
 df["DayNight"] = df["Time"].apply(lambda h: pd.Timestamp(h).hour >= 7).astype("int")
 
@@ -214,11 +224,11 @@ df["season"] = df["Month"] % 12 // 3 + 1
 #     df, ["HomeTeam_StartingPitcher_ID", "VisitingTeam_StartingPitcher_ID"]
 # )
 
-df.drop(
-    ["Unnamed: 3", "Unnamed: 5", "Attendance_TRUTH_x", "Attendance"],
-    axis=1,
-    inplace=True,
-)
+# df.drop(
+#     ["Unnamed: 3", "Unnamed: 5", "Attendance_TRUTH_x", "Attendance"],
+#     axis=1,
+#     inplace=True,
+# )
 
 df = df.sort_values(by="Date", axis=0).reset_index(drop=True)
 
@@ -236,9 +246,9 @@ def get_previous_year_metrics(df, feature, yrs_ago=1, get_last=True):
     if get_last:
         for idx, row in df_cp.iterrows():
             try:
-                prev_metric = np.median(group.get_group((row.Year - 1, row.HomeTeam))[
-                    feature
-                ])
+                prev_metric = np.median(
+                    group.get_group((row.Year - 1, row.HomeTeam))[feature]
+                )
                 df_cp.loc[idx, new_col_name] = prev_metric
             except:
                 df_cp.loc[idx, new_col_name] = np.nan
@@ -403,7 +413,7 @@ df[["lat", "lng"]] = df["HomeTeam_City"].apply(lambda city: city_coord.loc[city,
 
 df[
     [
-        # "StadiumID",
+        "StadiumID",
         "HomeTeam",
         "VisitingTeam",
         "HomeTeam_City",
@@ -414,7 +424,7 @@ df[
 ] = to_numerical(
     df,
     [
-        # "BallParkID",
+        "BallParkID",
         "HomeTeam",
         "VisitingTeam",
         "HomeTeam_City",
@@ -453,6 +463,8 @@ CONT_FEATURES = [
     "Is_quarter_start",
     "Is_year_end",
     "Is_year_start",
+    "final_HomeTeam_WinLossRatio_1_yr_ago",
+    # "final_HomeTeam_WinLossRatio_2_yr_ago"
     # "HomeTeam_cLI",
     # "HomeTeam_Rank",
     # "Stadium_Capacity",
@@ -492,7 +504,7 @@ for y in range(1, YEARS_AGO + 1):
 CONT_FEATURES.extend(historical_data)
 
 CAT_FEATURES = [
-    # "StadiumID",
+    "StadiumID",
     "Dayofweek",
     "VisitingTeam",
     "VisitingTeamLeague",
@@ -500,9 +512,28 @@ CAT_FEATURES = [
     "HomeTeamLeague",
 ]
 
+df["final_HomeTeam_WinLossRatio_1_yr_ago"] = (
+    df["final_HomeTeam_W_1_yr_ago"] / df["final_HomeTeam_L_1_yr_ago"]
+)
+
+df["final_HomeTeam_WinLossRatio_2_yr_ago"] = (
+    df["final_HomeTeam_W_2_yr_ago"] / df["final_HomeTeam_L_2_yr_ago"]
+)
+
 print("Features:")
 print(CONT_FEATURES + CAT_FEATURES)
 
+# PROPOSED SPLIT
+# Not effective since train and validation subset has year overlap,
+# so test set is not representative of test distribution
+# df_test = df[df.Year == 2022]
+# df_train = df[df.Year != 2022]
+
+# df_val = df_train.sample(frac=0.2, random_state=42)
+# df_train = df_train.drop(index=df_val.index)
+
+
+# OLD SPLIT
 df_test = df.sample(frac=0.2, random_state=42)
 df_train = df.drop(index=df_test.index)
 
