@@ -1,7 +1,7 @@
 minnemudac2023
 ==============================
 
-Analysis for MinneAnalytics MinneMUDAC 2023 Challenge centered on predicting MLB game attendance.
+Winning analysis for MinneAnalytics MinneMUDAC 2023 Challenge centered on predicting MLB game attendance.
 
 Project Organization
 ------------
