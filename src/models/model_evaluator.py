@@ -178,6 +178,7 @@ for model in ML_MODELS:
             y_pred = model.predict(X)
         MAE = mean_absolute_error(y_true, y_pred)
         RMSE = mean_squared_error(y_true, y_pred, squared=False)
+        print(f"MAPE {(np.abs(y_true - y_pred) / y_true).mean()}")
         model_performances["MAE"].append(MAE)
         model_performances["RMSE"].append(RMSE)
         model_performances["Set"].append(set_id[idx])
